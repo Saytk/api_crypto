@@ -1,0 +1,4 @@
+project: feisty-coder-461708-m9
+table_minute: data_bronze.RAW_CRYPTO_KLINES_1MIN
+assets: ["BTCUSDT", "ETHUSDT"]
+train_days: 90

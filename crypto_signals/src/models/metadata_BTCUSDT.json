@@ -1,0 +1,23 @@
+{
+  "symbol": "BTCUSDT",
+  "optimal_threshold": 0.5,
+  "rebalance_method": "combined",
+  "training_date": "2025-07-12T15:39:15.932212",
+  "performance": {
+    "log_loss": 0.05348916982813845,
+    "roc_auc": 0.9999761404421585,
+    "avg_precision_score": 0.9212114125170423,
+    "precision": 0.9928453494771602,
+    "recall": 0.996134732192159,
+    "f1_score": 0.9944873208379272,
+    "threshold": 0.5,
+    "positive_rate": 0.07860016438119133,
+    "specificity": 0.9993898432366469,
+    "balanced_accuracy": 0.997762287714403,
+    "avg_return_per_trade": 0.0005885525591634562,
+    "total_return": 2.1388,
+    "profit_factor": 83.26153846153845,
+    "win_rate": 0.9928453494771602,
+    "expected_value": 0.0015813979086406165
+  }
+}

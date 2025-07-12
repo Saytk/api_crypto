@@ -1,0 +1,23 @@
+{
+  "symbol": "ETHUSDT",
+  "optimal_threshold": 0.4,
+  "rebalance_method": "combined",
+  "training_date": "2025-07-12T16:10:11.918867",
+  "performance": {
+    "log_loss": 0.039496117893636405,
+    "roc_auc": 0.9999857696337753,
+    "avg_precision_score": 0.7577736337063414,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1_score": 1.0,
+    "threshold": 0.4,
+    "positive_rate": 0.2421372794339704,
+    "specificity": 1.0,
+    "balanced_accuracy": 1.0,
+    "avg_return_per_trade": 0.0006,
+    "total_return": 6.734999999999999,
+    "profit_factor": Infinity,
+    "win_rate": 1.0,
+    "expected_value": 0.0016
+  }
+}
