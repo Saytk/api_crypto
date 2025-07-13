@@ -15,8 +15,8 @@ from crypto_forecast_ml.data_loader import load_crypto_data_custom_range
 
 # === Paramètres ===
 SYMBOL = "BTCUSDT"
-START_DATE = "2025-07-08T09:00"
-END_DATE = "2025-07-11T09:00"
+START_DATE = '2025-06-01T09:00:00'
+END_DATE = "2025-07-13T09:00:00"
 N_CLUSTERS = 10
 OUTPUT_FILE = f"{SYMBOL}_labeled_candles.csv"
 
@@ -24,12 +24,14 @@ OUTPUT_FILE = f"{SYMBOL}_labeled_candles.csv"
 df = load_crypto_data_custom_range(symbol=SYMBOL, start_date=START_DATE, end_date=END_DATE)
 
 # === Feature engineering ===
-def compute_candle_features(df):
+def compute_features(df):
     body_size = (df['close'] - df['open']).abs()
     upper_wick = df['high'] - df[['open', 'close']].max(axis=1)
     lower_wick = df[['open', 'close']].min(axis=1) - df['low']
     rng = df['high'] - df['low']
     rng = rng.replace(0, 1e-9)
+    variation_pct = ((df['close'] - df['open']) / df['open']).fillna(0)
+    df["variation_pct"] = variation_pct
 
     return pd.DataFrame({
         'body_size': body_size,
@@ -43,15 +45,32 @@ def compute_candle_features(df):
                          df['volume'].rolling(1000, min_periods=1).std(ddof=0)
     }).fillna(0)
 
-features = compute_candle_features(df)
+def bucket_variation(row, thresholds=(-0.01, 0.01)):
+    v = row["variation_pct"]
+    if v < thresholds[0]:
+        return -1
+    elif v > thresholds[1]:
+        return 1
+    return 0
+def assign_candle_types(df, n_clusters=10):
+    if df.empty:
+        df["candle_type"] = []
+        return df
 
-# === Clustering avec scipy ===
-X = features.values.astype(np.float32)
-X_whitened = whiten(X)  # standardise les features (important pour KMeans)
+    feats = compute_features(df)
 
-centroids, labels = kmeans2(X_whitened, k=N_CLUSTERS, minit='++')
+    if feats.empty or len(feats) < n_clusters:
+        df["candle_type"] = [0] * len(df)
+        return df
 
-df['candle_type'] = labels
+    X = feats.values.astype(np.float32)
+    Xw = whiten(X)
+
+    _, labels = kmeans2(Xw, k=n_clusters, minit='++')
+    df['candle_type'] = labels
+    return df
+
+df = assign_candle_types(df,10)
 
 # === Sauvegarde ===
 df.to_csv(OUTPUT_FILE, index=False)
