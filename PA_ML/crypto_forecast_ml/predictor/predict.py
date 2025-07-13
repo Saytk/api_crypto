@@ -3,8 +3,8 @@ import xgboost as xgb
 import os
 import logging
 
-from crypto_forecast_ml.training.train_model import train_direction_model
-from crypto_forecast_ml.features.feature_engineering import add_all_features
+from PA_ML.crypto_forecast_ml.training.train_model import train_direction_model
+from PA_ML.crypto_forecast_ml.features.feature_engineering import add_all_features
 
 logger = logging.getLogger(__name__)
 

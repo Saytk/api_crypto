@@ -1,11 +1,11 @@
 # predictor/serve_api.py
 import logger
 from fastapi import FastAPI, Query
-from crypto_forecast_ml.data_loader import load_crypto_data
-from crypto_forecast_ml.features.technical_indicators import add_technical_indicators
-from crypto_forecast_ml.features.target_builder import build_targets
-from crypto_forecast_ml.predictor.predict import predict_direction
-from crypto_forecast_ml.data_loader import load_crypto_data_custom_range
+from PA_ML.crypto_forecast_ml.data_loader import load_crypto_data
+from PA_ML.crypto_forecast_ml.features.technical_indicators import add_technical_indicators
+from PA_ML.crypto_forecast_ml.features.target_builder import build_targets
+from PA_ML.crypto_forecast_ml.predictor.predict import predict_direction
+from PA_ML.crypto_forecast_ml.data_loader import load_crypto_data_custom_range
 
 import traceback
 app = FastAPI()
@@ -220,4 +220,5 @@ def load_data_pattern(
     }
 
 
-#uvicorn crypto_forecast_ml.predictor.serve_api:app --port 8006 --reload
+#uvicorn PA_ML.crypto_forecast_ml.predictor.serve_api:app --port 8000 --reload
+
