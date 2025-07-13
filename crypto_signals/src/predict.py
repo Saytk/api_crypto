@@ -14,7 +14,7 @@ CFG = yaml.safe_load(open(Path(__file__).parents[1] / "config" / "config.yaml"))
 # Charge tous les modèles disponibles au démarrage
 MODELS = {}
 for sym in CFG["assets"]:
-    model_file = Path(__file__).parents[2] / "models" / f"lgbm_hit5_{sym}.txt"
+    model_file = Path("models") / f"lgbm_hit5_{sym}.txt"
     if model_file.exists():
         MODELS[sym] = lgb.Booster(model_file=model_file)
         log.info(f"Model loaded: {model_file}")
