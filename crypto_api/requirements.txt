@@ -35,3 +35,7 @@ scipy
 
 # Monitoring
 evidently
+
+# Testing
+pytest
+pytest-asyncio

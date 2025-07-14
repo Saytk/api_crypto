@@ -360,11 +360,13 @@ async def train_model(
 @app.get("/data/{symbol}")
 def get_historical_data(
     symbol: str,
-    days: int = Query(7, description="Number of days of historical data"),
-    interval: str = Query("1m", description="Data interval (1m, 1h)")
+    days: int  = Query(7,  description="Number of days of historical data"),
+    interval: str = Query("1m", description="Data interval (1m, 1h)"),
+    raw: bool = Query(False, description="Return plain array instead of wrapped object")
 ):
     """
-    Retourne les données historiques pour un symbole donné
+    Return historical candle data.
+    If ?raw=true, the response is a plain array of candles.
     """
     try:
         df = load_minute(symbol, days=days)
@@ -373,22 +375,26 @@ def get_historical_data(
             from crypto_signals.src.data_loader import minute_to_hour
             df = minute_to_hour(df)
 
-        # Convert to dict for JSON response
-        data = df.to_dict(orient="records")
-
-        # Convert timestamps to ISO format
-        for item in data:
+        candles = df.to_dict(orient="records")
+        for item in candles:
             item["timestamp_utc"] = item["timestamp_utc"].isoformat()
 
+        # --- nouveau comportement ------------------------------------- #
+        if raw:
+            return candles                         # ← tableau brut
+
+        # --- comportement historique ---------------------------------- #
         return {
-            "symbol": symbol,
+            "symbol":   symbol,
             "interval": interval,
-            "days": days,
-            "count": len(data),
-            "data": data
+            "days":     days,
+            "count":    len(candles),
+            "data":     candles
         }
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to load data: {str(e)}")
+        raise HTTPException(status_code=500,
+                            detail=f"Failed to load data: {e}")
 
 @app.post("/monitoring/evaluate")
 async def evaluate_model_performance(

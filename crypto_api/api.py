@@ -212,7 +212,7 @@ async def get_portfolio(current_user: User = Depends(get_current_active_user)):
     """
     if current_user.username not in user_portfolios:
         user_portfolios[current_user.username] = Portfolio(assets=[], total_value_usd=0)
-    
+
     return user_portfolios[current_user.username]
 
 @portfolio_router.post("/transaction", response_model=Portfolio)
@@ -225,9 +225,9 @@ async def add_transaction(
     """
     if current_user.username not in user_portfolios:
         user_portfolios[current_user.username] = Portfolio(assets=[], total_value_usd=0)
-    
+
     portfolio = user_portfolios[current_user.username]
-    
+
     # Find if asset already exists in portfolio
     asset_exists = False
     for asset in portfolio.assets:
@@ -246,7 +246,7 @@ async def add_transaction(
                 if asset.amount == 0:
                     portfolio.assets = [a for a in portfolio.assets if a.symbol != transaction.symbol]
             break
-    
+
     # If asset doesn't exist and it's a buy transaction, add it
     if not asset_exists and transaction.transaction_type.lower() == "buy":
         portfolio.assets.append(Asset(
@@ -254,10 +254,10 @@ async def add_transaction(
             amount=transaction.amount,
             price=transaction.price
         ))
-    
+
     # Recalculate total portfolio value
     portfolio.total_value_usd = sum(asset.amount * asset.price for asset in portfolio.assets)
-    
+
     return portfolio
 
 @portfolio_router.delete("/", response_model=Portfolio)
@@ -283,6 +283,28 @@ async def get_historical_data(
     """
     from crypto_signals.src.api import get_historical_data
     return get_historical_data(symbol, days, interval)
+
+@app.get("/data/{symbol}/last_candle")
+async def get_last_candle(
+    symbol: str = Path(..., description="Trading pair symbol (e.g., BTCUSDT, ETHUSDT)")
+):
+    """
+    Returns only the last (most recent) candle for a given symbol
+    """
+    from crypto_signals.src.data_loader import load_last_candle
+
+    try:
+        candle = load_last_candle(symbol)
+        if not candle:
+            raise HTTPException(status_code=404, detail=f"No data found for {symbol}")
+
+        return {
+            "symbol": symbol,
+            "timestamp": candle["timestamp_utc"],
+            "candle": candle
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load last candle: {str(e)}")
 
 # Include routers in the main app
 app.include_router(prediction_router)

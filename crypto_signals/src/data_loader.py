@@ -66,3 +66,39 @@ def minute_to_hour(df_min: pd.DataFrame) -> pd.DataFrame:
             .dropna()
             .reset_index())
     return df_h
+
+def load_last_candle(symbol: str = "BTCUSDT") -> dict:
+    """
+    Retrieve only the last (most recent) candle for a given symbol.
+
+    Args:
+        symbol: Trading pair symbol (e.g., BTCUSDT, ETHUSDT)
+
+    Returns:
+        A dictionary containing the last candle data
+    """
+    table = f"{CFG['project']}.{CFG['table_minute']}"
+    query = f"""
+        SELECT timestamp_utc, open, high, low, close,
+               volume, quote_volume, nb_trades
+        FROM `{table}`
+        WHERE symbol = '{symbol}'
+        ORDER BY timestamp_utc DESC
+        LIMIT 1
+    """
+    client = _client()
+    try:
+        df = client.query(query).to_dataframe()
+        if df.empty:
+            log.warning(f"No data found for {symbol}")
+            return {}
+
+        # Convert to dictionary and format timestamp
+        candle = df.iloc[0].to_dict()
+        candle["timestamp_utc"] = candle["timestamp_utc"].isoformat()
+
+        log.info(f"{symbol} – last candle loaded: {candle['timestamp_utc']}")
+        return candle
+    finally:
+        client.close()
+        log.debug(f"BigQuery client closed after loading last candle for {symbol}")

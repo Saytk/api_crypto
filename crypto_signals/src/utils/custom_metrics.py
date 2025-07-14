@@ -539,10 +539,13 @@ class LogisticRegression:
             X: Samples
 
         Returns:
-            Array of probabilities of the positive class
+            Array of probabilities for both classes [negative, positive]
         """
         linear_model = np.dot(X, self.weights) + self.bias
-        return self._sigmoid(linear_model)
+        pos_probs = self._sigmoid(linear_model)
+        # Create a 2D array with probabilities for both classes [negative, positive]
+        neg_probs = 1 - pos_probs
+        return np.column_stack((neg_probs, pos_probs))
 
     def predict(self, X: np.ndarray) -> np.ndarray:
         """
@@ -555,4 +558,4 @@ class LogisticRegression:
             Predicted class labels
         """
         probas = self.predict_proba(X)
-        return (probas >= 0.5).astype(int)
+        return (probas[:, 1] >= 0.5).astype(int)
