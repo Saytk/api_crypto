@@ -43,8 +43,11 @@ def predict_latest(symbol: str = Query("BTCUSDT", description="Crypto symbol")):
 
 
 
-paris = ZoneInfo("Europe/Paris")
-FMT_IN = "%Y-%m-%dT%H:%M"           # 2025-07-06T09:15
+FMT_MIN = "%Y-%m-%dT%H:%M"      # 2025-07-14T13:03 (UTC)
+
+def parse_min(dt_str: str) -> datetime:
+    """Parse YYYY-MM-DDTHH:MM as UTC-aware datetime."""
+    return datetime.strptime(dt_str, FMT_MIN).replace(tzinfo=timezone.utc)        # 2025-07-06T09:15
 
 @app.get("/load-data")
 def load_data(
@@ -53,12 +56,9 @@ def load_data(
     end_date:   str = Query(..., description="YYYY-MM-DDTHH:MM 🇫🇷")
 ):
     # 👉 parse + convert -> UTC
-    start_utc = (datetime.strptime(start_date, FMT_IN)
-                           .replace(tzinfo=paris)
-                           .astimezone(timezone.utc))
-    end_utc   = (datetime.strptime(end_date,   FMT_IN)
-                           .replace(tzinfo=paris)
-                           .astimezone(timezone.utc))
+    start_utc = parse_min(start_date)
+
+    end_utc   = parse_min(end_date)
 
     df = load_crypto_data_custom_range(symbol=symbol,
                                        start_date=start_utc,
@@ -205,9 +205,8 @@ def load_data_pattern(
     start_date: str = Query(..., description="YYYY-MM-DDTHH:MM"),
     end_date: str = Query(..., description="YYYY-MM-DDTHH:MM")
 ):
-    FMT = "%Y-%m-%dT%H:%M"
-    start_utc = datetime.strptime(start_date, FMT).replace(tzinfo=timezone.utc)
-    end_utc = datetime.strptime(end_date, FMT).replace(tzinfo=timezone.utc)
+    start_utc = parse_min(start_date)
+    end_utc = parse_min(end_date)
 
     df = load_crypto_data_custom_range(symbol=symbol, start_date=start_utc, end_date=end_utc)
     df = df.sort_values("timestamp_utc").reset_index(drop=True)
@@ -247,10 +246,9 @@ def patterns_classic(
     Renvoie la liste des patterns chandeliers « classiques » détectés
     entre start_date et end_date sur le symbole donné.
     """
-    FMT = "%Y-%m-%dT%H:%M"
     # 1) Conversion des dates en UTC (même logique que tes autres endpoints)
-    start_utc = datetime.strptime(start_date, FMT).replace(tzinfo=timezone.utc)
-    end_utc   = datetime.strptime(end_date,   FMT).replace(tzinfo=timezone.utc)
+    start_utc = parse_min(start_date)
+    end_utc = parse_min(end_date)
 
     # 2) Récupération des bougies (ta fonction maison)
     df = load_crypto_data_custom_range(
