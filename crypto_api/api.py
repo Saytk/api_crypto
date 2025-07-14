@@ -198,6 +198,18 @@ async def load_data_with_patterns(
     from PA_ML.crypto_forecast_ml.predictor.serve_api import load_data_pattern
     return load_data_pattern(symbol, start_date, end_date)
 
+@pattern_router.get("/load-data-patterns-classic")
+async def patterns_classic(
+    symbol: str = Query(..., examples={"BTCUSDT": { "summary": "Bitcoin/USDT" }}),
+    start_date: str = Query(..., description="YYYY-MM-DDTHH:MM (local)"),
+    end_date: str   = Query(..., description="YYYY-MM-DDTHH:MM (local)"),
+    atr_min_pct: float = Query(0.05, description="ATR filter in % (volatility guard)")
+):
+    """
+    Loads historical data and detects patterns within it
+    """
+    from PA_ML.crypto_forecast_ml.predictor.serve_api import patterns_classic
+    return patterns_classic(symbol, start_date, end_date,atr_min_pct)
 # ========================================================================= #
 # Portfolio Management Endpoints (new functionality)
 # ========================================================================= #

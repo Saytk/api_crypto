@@ -6,6 +6,7 @@ from PA_ML.crypto_forecast_ml.features.technical_indicators import add_technical
 from PA_ML.crypto_forecast_ml.features.target_builder import build_targets
 from PA_ML.crypto_forecast_ml.predictor.predict import predict_direction
 from PA_ML.crypto_forecast_ml.data_loader import load_crypto_data_custom_range
+from PA_ML.candlestick_patterns import detect_classic_patterns
 
 import traceback
 app = FastAPI()
@@ -42,8 +43,11 @@ def predict_latest(symbol: str = Query("BTCUSDT", description="Crypto symbol")):
 
 
 
-paris = ZoneInfo("Europe/Paris")
-FMT_IN = "%Y-%m-%dT%H:%M"           # 2025-07-06T09:15
+FMT_MIN = "%Y-%m-%dT%H:%M"      # 2025-07-14T13:03 (UTC)
+
+def parse_min(dt_str: str) -> datetime:
+    """Parse YYYY-MM-DDTHH:MM as UTC-aware datetime."""
+    return datetime.strptime(dt_str, FMT_MIN).replace(tzinfo=timezone.utc)        # 2025-07-06T09:15
 
 @app.get("/load-data")
 def load_data(
@@ -52,12 +56,9 @@ def load_data(
     end_date:   str = Query(..., description="YYYY-MM-DDTHH:MM 🇫🇷")
 ):
     # 👉 parse + convert -> UTC
-    start_utc = (datetime.strptime(start_date, FMT_IN)
-                           .replace(tzinfo=paris)
-                           .astimezone(timezone.utc))
-    end_utc   = (datetime.strptime(end_date,   FMT_IN)
-                           .replace(tzinfo=paris)
-                           .astimezone(timezone.utc))
+    start_utc = parse_min(start_date)
+
+    end_utc   = parse_min(end_date)
 
     df = load_crypto_data_custom_range(symbol=symbol,
                                        start_date=start_utc,
@@ -204,9 +205,8 @@ def load_data_pattern(
     start_date: str = Query(..., description="YYYY-MM-DDTHH:MM"),
     end_date: str = Query(..., description="YYYY-MM-DDTHH:MM")
 ):
-    FMT = "%Y-%m-%dT%H:%M"
-    start_utc = datetime.strptime(start_date, FMT).replace(tzinfo=timezone.utc)
-    end_utc = datetime.strptime(end_date, FMT).replace(tzinfo=timezone.utc)
+    start_utc = parse_min(start_date)
+    end_utc = parse_min(end_date)
 
     df = load_crypto_data_custom_range(symbol=symbol, start_date=start_utc, end_date=end_utc)
     df = df.sort_values("timestamp_utc").reset_index(drop=True)
@@ -235,6 +235,46 @@ def load_data_pattern(
         "short_term_forecast": short_term_forecast
     }
 
+@app.get("load-data-patterns-classic")
+def patterns_classic(
+    symbol: str = Query(..., examples={"BTCUSDT": { "summary": "Bitcoin/USDT" }}),
+    start_date: str = Query(..., description="YYYY-MM-DDTHH:MM (local)"),
+    end_date: str   = Query(..., description="YYYY-MM-DDTHH:MM (local)"),
+    atr_min_pct: float = Query(0.05, description="ATR filter in % (volatility guard)")
+):
+    """
+    Renvoie la liste des patterns chandeliers « classiques » détectés
+    entre start_date et end_date sur le symbole donné.
+    """
+    # 1) Conversion des dates en UTC (même logique que tes autres endpoints)
+    start_utc = parse_min(start_date)
+    end_utc = parse_min(end_date)
+
+    # 2) Récupération des bougies (ta fonction maison)
+    df = load_crypto_data_custom_range(
+        symbol=symbol,
+        start_date=start_utc,
+        end_date=end_utc
+    ).sort_values("timestamp_utc").reset_index(drop=True)
+
+    if df.empty:
+        return {
+            "symbol": symbol,
+            "start_date": start_utc.isoformat(),
+            "end_date": end_utc.isoformat(),
+            "patterns_detected": []
+        }
+
+    # 3) Détection des motifs
+    patt_df: pd.DataFrame = detect_classic_patterns(df, atr_min_pct=atr_min_pct)
+
+    # 4) Renvoi JSON — chaque pattern est un dict
+    return {
+        "symbol": symbol,
+        "start_date": start_utc.isoformat(),
+        "end_date": end_utc.isoformat(),
+        "patterns_detected": patt_df.to_dict(orient="records")
+    }
 
 
 #uvicorn PA_ML.crypto_forecast_ml.predictor.serve_api:app --port 8000 --reload
