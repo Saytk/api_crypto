@@ -18,6 +18,8 @@ import pandas as pd
 import numpy as np
 from scipy.cluster.vq import kmeans2, whiten
 import os
+import joblib
+from scipy.cluster.vq import vq
 
 # ✅ Initialise le logger proprement
 logging.basicConfig(level=logging.INFO)
@@ -85,44 +87,45 @@ def load_patterns(filename="patterns_significatifs.csv"):
         for _, row in patterns_df.iterrows()
     }
 
-# === Fonctions d'analyse ===
 def compute_features(df):
-    body = (df['close'] - df['open']).abs()
-    upper = df['high'] - df[['open', 'close']].max(axis=1)
-    lower = df[['open', 'close']].min(axis=1) - df['low']
-    rng = (df['high'] - df['low']).replace(0, 1e-9)
+    body_size   = (df['close'] - df['open']).abs()
+    upper_wick  = df['high'] - df[['open', 'close']].max(axis=1)
+    lower_wick  = df[['open', 'close']].min(axis=1) - df['low']
+    rng         = (df['high'] - df['low']).replace(0, 1e-9)
 
     variation_pct = ((df['close'] - df['open']) / df['open']).fillna(0)
     df["variation_pct"] = variation_pct
 
     return pd.DataFrame({
-        'body_size': body,
-        'upper_wick': upper,
-        'lower_wick': lower,
-        'body_ratio': body / rng,
-        'upper_ratio': upper / rng,
-        'lower_ratio': lower / rng,
-        'direction': np.sign(df['close'] - df['open']),
-        'volume_zscore': (df['volume'] - df['volume'].rolling(1000, min_periods=1).mean()) /
-                         df['volume'].rolling(1000, min_periods=1).std(ddof=0)
+        "body_size":   body_size,
+        "upper_wick":  upper_wick,
+        "lower_wick":  lower_wick,
+        "body_ratio":  body_size / rng,
+        "upper_ratio": upper_wick / rng,
+        "lower_ratio": lower_wick / rng,
+        "direction":   np.sign(df['close'] - df['open']),
+        "volume_zscore":
+            (df['volume'] - df['volume'].rolling(1_000, 1).mean())
+          /  df['volume'].rolling(1_000, 1).std(ddof=0),
     }).fillna(0)
 
-def assign_candle_types(df, n_clusters=10):
-    if df.empty:
-        df["candle_type"] = []
+
+def assign_candle_types(df):
+    filename = "candle_kmeans_scipy.pkl"
+    base_dir = os.path.dirname(__file__)
+    pattern_path = os.path.join(base_dir, filename)
+    MODEL = joblib.load(pattern_path)
+    CENTROIDS = MODEL["centroids"]
+    STDS = MODEL["stds"]
+    feats = compute_features(df)          # même fonction qu'à l'entraînement
+    if feats.empty:
+        df["candle_type"] = 0
         return df
 
-    feats = compute_features(df)
-
-    if feats.empty or len(feats) < n_clusters:
-        df["candle_type"] = [0] * len(df)
-        return df
-
-    X = feats.values.astype(np.float32)
-    Xw = whiten(X)
-
-    _, labels = kmeans2(Xw, k=n_clusters, minit='++')
-    df['candle_type'] = labels
+    X   = feats.values.astype(np.float32)
+    Xw  = X / STDS                       # <-- même whitening
+    labels, _ = vq(Xw, CENTROIDS)        # simple quantisation, ultra-rapide
+    df["candle_type"] = labels
     return df
 
 def bucket_variation(row, thresholds=(-0.01, 0.01)):
