@@ -39,9 +39,13 @@ def load_crypto_data(symbol: str = "BTCUSDT", days: int = 7, max_rows: int = 100
         LIMIT {max_rows}
     """
 
+    # Log pour le debugging
+    logger.info(f"Query: {query}")
+
     logger.info(f"📥 Launching BigQuery query for {symbol}...")
     df = client.query(query).to_dataframe()
     logger.info(f"📊 Loaded {len(df)} rows.")
+    logger.info(f"Colonnes dans le DataFrame: {df.columns.tolist()}")
 
     return df
 
@@ -74,6 +78,48 @@ def load_crypto_data_custom_range(symbol: str, start_date: str, end_date: str, m
     """
 
     logger.info(f"📥 Running query for range: {start_date} to {end_date}")
+    logger.info(f"📥 Running query : {query}")
+    df = client.query(query).to_dataframe()
+    logger.info(f"📊 Loaded {len(df)} rows.")
+    return df
+
+
+def load_crypto_data_all(symbol: str, max_rows: int = 1_000_000) -> pd.DataFrame:
+    """
+    Charge toutes les données disponibles pour un symbole donné, sans contrainte de temps.
+
+    Args:
+        symbol (str): Symbole de la paire de trading (ex: "BTCUSDT")
+        max_rows (int): Nombre maximum de lignes à charger
+
+    Returns:
+        pd.DataFrame: DataFrame avec les données OHLCV
+    """
+    logger.info(f"🟡 load_crypto_data_all() CALLED with symbol={symbol}")
+
+    # 🔍 Recherche les credentials
+    for p in Path(__file__).resolve().parents:
+        if (p / "crypto_forecast_ml" / "config" / "credentials.json").exists():
+            credentials_path = p / "crypto_forecast_ml" / "config" / "credentials.json"
+            break
+    else:
+        raise FileNotFoundError("❌ Impossible de localiser crypto_forecast_ml/config/credentials.json")
+
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(credentials_path)
+    logger.info(f"✅ Using credentials: {credentials_path}")
+
+    # BigQuery client
+    client = bigquery.Client()
+
+    query = f"""
+        SELECT timestamp_utc, open, high, low, close, volume, quote_volume, nb_trades
+        FROM `feisty-coder-461708-m9.data_bronze.RAW_CRYPTO_KLINES_1MIN`
+        WHERE symbol = '{symbol}'
+        ORDER BY timestamp_utc ASC
+        LIMIT {max_rows}
+    """
+
+    logger.info(f"📥 Running query for ALL available data")
     logger.info(f"📥 Running query : {query}")
     df = client.query(query).to_dataframe()
     logger.info(f"📊 Loaded {len(df)} rows.")

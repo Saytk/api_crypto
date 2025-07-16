@@ -27,15 +27,21 @@ def _calendar(df: pd.DataFrame) -> pd.DataFrame:
     month  = ts.dt.month
     dow    = ts.dt.dayofweek
 
-    df["minute_sin"] = np.sin(2 * np.pi * minute / 60)
-    df["minute_cos"] = np.cos(2 * np.pi * minute / 60)
-    df["hour_sin"]   = np.sin(2 * np.pi * hour   / 24)
-    df["hour_cos"]   = np.cos(2 * np.pi * hour   / 24)
-    df["dow"]        = dow
-    df["day_sin"]    = np.sin(2 * np.pi * day    / 31)
-    df["day_cos"]    = np.cos(2 * np.pi * day    / 31)
-    df["month_sin"]  = np.sin(2 * np.pi * month  / 12)
-    df["month_cos"]  = np.cos(2 * np.pi * month  / 12)
+    # Create a copy of the dataframe to avoid the SettingWithCopyWarning
+    df = df.copy()
+
+    # Assign all values at once using a dictionary
+    df = df.assign(
+        minute_sin = np.sin(2 * np.pi * minute / 60),
+        minute_cos = np.cos(2 * np.pi * minute / 60),
+        hour_sin = np.sin(2 * np.pi * hour / 24),
+        hour_cos = np.cos(2 * np.pi * hour / 24),
+        dow = dow,
+        day_sin = np.sin(2 * np.pi * day / 31),
+        day_cos = np.cos(2 * np.pi * day / 31),
+        month_sin = np.sin(2 * np.pi * month / 12),
+        month_cos = np.cos(2 * np.pi * month / 12)
+    )
     return df
 
 
@@ -47,47 +53,55 @@ def _add_window_features(df: pd.DataFrame, window_size: int = 60) -> pd.DataFram
     Ajoute des features basées sur une fenêtre glissante (window_size minutes).
     Ces features sont particulièrement adaptées aux modèles GBM.
     """
+    # Create a copy of the dataframe to avoid the SettingWithCopyWarning
+    df = df.copy()
+
+    # Dictionary to hold all new features
+    new_features = {}
+
     # Prix et volumes
     for col in ['close', 'high', 'low', 'volume']:
         # Statistiques de base sur la fenêtre
-        df[f'{col}_mean_{window_size}'] = df[col].rolling(window_size).mean()
-        df[f'{col}_std_{window_size}'] = df[col].rolling(window_size).std()
-        df[f'{col}_min_{window_size}'] = df[col].rolling(window_size).min()
-        df[f'{col}_max_{window_size}'] = df[col].rolling(window_size).max()
+        new_features[f'{col}_mean_{window_size}'] = df[col].rolling(window_size).mean()
+        new_features[f'{col}_std_{window_size}'] = df[col].rolling(window_size).std()
+        new_features[f'{col}_min_{window_size}'] = df[col].rolling(window_size).min()
+        new_features[f'{col}_max_{window_size}'] = df[col].rolling(window_size).max()
 
         # Quantiles pour capturer la distribution
-        df[f'{col}_q25_{window_size}'] = df[col].rolling(window_size).quantile(0.25)
-        df[f'{col}_q75_{window_size}'] = df[col].rolling(window_size).quantile(0.75)
+        new_features[f'{col}_q25_{window_size}'] = df[col].rolling(window_size).quantile(0.25)
+        new_features[f'{col}_q75_{window_size}'] = df[col].rolling(window_size).quantile(0.75)
 
     # Features de momentum (variations)
     for period in [5, 15, 30, 60]:
         if period <= window_size:
             # Variation en pourcentage
-            df[f'pct_change_{period}'] = df['close'].pct_change(period)
+            new_features[f'pct_change_{period}'] = df['close'].pct_change(period)
             # Momentum (différence absolue)
-            df[f'momentum_{period}'] = df['close'] - df['close'].shift(period)
+            new_features[f'momentum_{period}'] = df['close'] - df['close'].shift(period)
             # Accélération (dérivée seconde)
-            df[f'acceleration_{period}'] = df[f'momentum_{period}'] - df[f'momentum_{period}'].shift(period)
+            momentum = df['close'] - df['close'].shift(period)
+            new_features[f'acceleration_{period}'] = momentum - momentum.shift(period)
 
     # Volatilité sur différentes périodes
     for period in [5, 15, 30, 60]:
         if period <= window_size:
-            df[f'volatility_{period}'] = df['close'].rolling(period).std() / df['close'].rolling(period).mean()
+            new_features[f'volatility_{period}'] = df['close'].rolling(period).std() / df['close'].rolling(period).mean()
 
     # Ratio high/low sur différentes périodes
     for period in [5, 15, 30, 60]:
         if period <= window_size:
-            df[f'high_low_ratio_{period}'] = df['high'].rolling(period).max() / df['low'].rolling(period).min()
+            new_features[f'high_low_ratio_{period}'] = df['high'].rolling(period).max() / df['low'].rolling(period).min()
 
     # Volume features
-    df['volume_change_5'] = df['volume'].pct_change(5)
-    df['volume_ma_ratio'] = df['volume'] / df['volume'].rolling(window_size).mean()
+    new_features['volume_change_5'] = df['volume'].pct_change(5)
+    new_features['volume_ma_ratio'] = df['volume'] / df['volume'].rolling(window_size).mean()
 
     # Lags des prix de clôture (pour capturer l'autocorrélation)
     for lag in [1, 5, 15, 30]:
-        df[f'close_lag_{lag}'] = df['close'].shift(lag)
+        new_features[f'close_lag_{lag}'] = df['close'].shift(lag)
 
-    return df
+    # Assign all new features at once
+    return df.assign(**new_features)
 
 
 # ========================================================================= #
@@ -106,40 +120,49 @@ def add_minute_features(df: pd.DataFrame, window_size: int = 60) -> pd.DataFrame
     Returns:
         pd.DataFrame: DataFrame enrichi avec features techniques
     """
+    # Create a copy of the dataframe to avoid the SettingWithCopyWarning
+    df = df.copy()
+
+    # Dictionary to hold all new features
+    new_features = {}
+
     # --------------------------------------------------------------------- #
     # Moyennes mobiles & RSI
     # --------------------------------------------------------------------- #
-    df["sma_20"]  = df["close"].rolling(20).mean()
-    df["sma_50"]  = df["close"].rolling(50).mean()
-    df["sma_100"] = df["close"].rolling(100).mean()
+    new_features["sma_20"]  = df["close"].rolling(20).mean()
+    new_features["sma_50"]  = df["close"].rolling(50).mean()
+    new_features["sma_100"] = df["close"].rolling(100).mean()
 
-    df["ema_12"]  = df["close"].ewm(span=12, adjust=False).mean()
-    df["ema_26"]  = df["close"].ewm(span=26, adjust=False).mean()
+    new_features["ema_12"]  = df["close"].ewm(span=12, adjust=False).mean()
+    new_features["ema_26"]  = df["close"].ewm(span=26, adjust=False).mean()
 
-    df["rsi_14"]  = ta.momentum.rsi(df["close"], window=14)
+    new_features["rsi_14"]  = ta.momentum.rsi(df["close"], window=14)
 
     # --------------------------------------------------------------------- #
     # Indicateurs techniques supplémentaires
     # --------------------------------------------------------------------- #
     # MACD
     macd = ta.trend.macd(df["close"])
-    df["macd"] = macd
-    df["macd_signal"] = ta.trend.macd_signal(df["close"])
-    df["macd_diff"] = ta.trend.macd_diff(df["close"])
+    new_features["macd"] = macd
+    new_features["macd_signal"] = ta.trend.macd_signal(df["close"])
+    new_features["macd_diff"] = ta.trend.macd_diff(df["close"])
 
     # Bollinger Bands
     bb = ta.volatility.BollingerBands(df["close"], window=20, window_dev=2)
-    df["bb_upper"] = bb.bollinger_hband()
-    df["bb_lower"] = bb.bollinger_lband()
-    df["bb_width"] = bb.bollinger_wband()
+    new_features["bb_upper"] = bb.bollinger_hband()
+    new_features["bb_lower"] = bb.bollinger_lband()
+    new_features["bb_width"] = bb.bollinger_wband()
 
     # ATR (Average True Range)
-    df["atr_14"] = ta.volatility.average_true_range(df["high"], df["low"], df["close"], window=14)
+    new_features["atr_14"] = ta.volatility.average_true_range(df["high"], df["low"], df["close"], window=14)
 
     # Stochastic Oscillator
     stoch = ta.momentum.StochasticOscillator(df["high"], df["low"], df["close"], window=14, smooth_window=3)
-    df["stoch_k"] = stoch.stoch()
-    df["stoch_d"] = stoch.stoch_signal()
+    new_features["stoch_k"] = stoch.stoch()
+    new_features["stoch_d"] = stoch.stoch_signal()
+
+    # Assign the first batch of features
+    df = df.assign(**new_features)
 
     # --------------------------------------------------------------------- #
     # Direction et force de la tendance
@@ -147,13 +170,19 @@ def add_minute_features(df: pd.DataFrame, window_size: int = 60) -> pd.DataFrame
     conditions_up   = (df["sma_20"] > df["sma_50"]) & (df["sma_50"] > df["sma_100"])
     conditions_down = (df["sma_20"] < df["sma_50"]) & (df["sma_50"] < df["sma_100"])
 
-    df["trend_direction"] = np.select(
+    trend_direction = np.select(
         [conditions_up, conditions_down],
         [1, -1],
         default=np.sign(df["sma_20"] - df["sma_50"])
     )
 
-    df["adx_14"] = ta.trend.adx(df["high"], df["low"], df["close"], window=14)
+    adx_14 = ta.trend.adx(df["high"], df["low"], df["close"], window=14)
+
+    # Add trend features
+    df = df.assign(
+        trend_direction=trend_direction,
+        adx_14=adx_14
+    )
 
     # --------------------------------------------------------------------- #
     # Durée de la tendance (vectorisé)
@@ -161,7 +190,9 @@ def add_minute_features(df: pd.DataFrame, window_size: int = 60) -> pd.DataFrame
     # Nouveau groupe chaque fois que la direction change
     trend_group = (df["trend_direction"] != df["trend_direction"].shift()).cumsum()
     # Compte cumulatif à l’intérieur de chaque groupe
-    df["trend_duration"] = trend_group.groupby(trend_group).cumcount()
+    trend_duration = trend_group.groupby(trend_group).cumcount()
+
+    df = df.assign(trend_duration=trend_duration)
 
     # --------------------------------------------------------------------- #
     # Features basées sur fenêtres (window-based)

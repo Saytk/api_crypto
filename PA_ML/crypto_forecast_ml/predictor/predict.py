@@ -2,6 +2,7 @@ import pandas as pd
 import xgboost as xgb
 import os
 import logging
+from pathlib import Path
 
 from PA_ML.crypto_forecast_ml.training.train_model import train_direction_model
 from PA_ML.crypto_forecast_ml.features.feature_engineering import add_all_features
@@ -9,7 +10,10 @@ from PA_ML.crypto_forecast_ml.features.feature_engineering import add_all_featur
 logger = logging.getLogger(__name__)
 
 def predict_direction(df: pd.DataFrame) -> pd.DataFrame:
-    model_path = "models/xgb_direction.json"
+    # Use absolute path for model file
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    model_path = os.path.join(base_dir, "models", "xgb_direction.json")
+    logger.info(f"Using model path: {model_path}")
 
     if not os.path.exists(model_path):
         logger.warning(f"⚠️ Model not found at {model_path}, training a new one...")
