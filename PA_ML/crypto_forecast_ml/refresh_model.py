@@ -31,7 +31,7 @@ def evaluate_model(df: pd.DataFrame, model_path: str) -> float:
     dmatrix = xgb.DMatrix(X)
 
     model = xgb.Booster()
-    model.load_model(model_path)
+    model.load_model(str(model_path))
 
     y_pred = model.predict(dmatrix).tolist()
     return compute_log_loss(y_true, y_pred)

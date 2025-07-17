@@ -32,7 +32,7 @@ def predict_direction(df: pd.DataFrame) -> pd.DataFrame:
     ]].copy()
 
     model = xgb.Booster()
-    model.load_model(model_path)
+    model.load_model(str(model_path))
     logger.info("✅ XGBoost model loaded successfully.")
 
     dmatrix = xgb.DMatrix(features)

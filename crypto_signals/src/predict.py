@@ -9,35 +9,58 @@ from crypto_signals.src.utils.logger import get_logger
 log = get_logger()
 CFG = yaml.safe_load(open(Path(__file__).parents[1] / "config" / "config.yaml"))
 
-# Charge les modèles et métadonnées au démarrage
+# Initialiser les dictionnaires pour stocker les modèles et métadonnées
+# Ils seront chargés à la demande plutôt qu'au démarrage
 MODELS = {}
 METADATA = {}
 CALIBRATORS = {}
 
-for sym in CFG["assets"]:
-    model_file = Path(__file__).parent / "models" / f"lgbm_hit5_{sym}.txt"
-    metadata_file = Path(__file__).parent / "models" / f"metadata_{sym}.json"
+def load_model(symbol: str) -> bool:
+    """
+    Charge un modèle et ses métadonnées à la demande.
 
-    if model_file.exists() and metadata_file.exists():
+    Args:
+        symbol: Symbole de la paire (ex: BTCUSDT)
+
+    Returns:
+        bool: True si le chargement a réussi, False sinon
+    """
+    model_file = Path(__file__).parent / "models" / f"lgbm_hit5_{symbol}.txt"
+    metadata_file = Path(__file__).parent / "models" / f"metadata_{symbol}.json"
+
+    if not model_file.exists() or not metadata_file.exists():
+        log.warning(f"Model or metadata missing for {symbol} – run train_lgbm.py first")
+        return False
+
+    try:
+        # Vérifier le format du fichier
+        with open(model_file, 'r') as f:
+            first_line = f.readline().strip()
+            if first_line != "tree":
+                log.error(f"Invalid model format for {symbol}: file does not start with 'tree'")
+                return False
+
         # Charger le modèle
-        MODELS[sym] = lgb.Booster(model_file=model_file)
+        MODELS[symbol] = lgb.Booster(model_file=str(model_file))
 
         # Charger les métadonnées
         with open(metadata_file, 'r') as f:
-            METADATA[sym] = json.load(f)
+            METADATA[symbol] = json.load(f)
 
         # Charger le calibrateur si présent
-        if METADATA[sym].get("calibration"):
-            weights = np.array(METADATA[sym]["calibration"]["weights"])
-            bias = METADATA[sym]["calibration"]["bias"]
+        if METADATA[symbol].get("calibration"):
+            weights = np.array(METADATA[symbol]["calibration"]["weights"])
+            bias = METADATA[symbol]["calibration"]["bias"]
             calibrator = LogisticRegression()
             calibrator.weights = weights
             calibrator.bias = bias
-            CALIBRATORS[sym] = calibrator
+            CALIBRATORS[symbol] = calibrator
 
         log.info(f"Model loaded: {model_file}")
-    else:
-        log.warning(f"Model or metadata missing for {sym} – run train_lgbm.py first")
+        return True
+    except Exception as e:
+        log.error(f"Error loading model for {symbol}: {str(e)}")
+        return False
 
 def predict(symbol: str = "BTCUSDT", use_incomplete_candle: bool = True) -> dict:
     """
@@ -51,11 +74,10 @@ def predict(symbol: str = "BTCUSDT", use_incomplete_candle: bool = True) -> dict
     Returns:
         dict: Prédiction et suggestion de trade
     """
-    if symbol not in MODELS:
-        return {"error": f"model for {symbol} not found"}
-
-    if symbol not in METADATA:
-        return {"error": f"metadata for {symbol} not found"}
+    # Vérifier si le modèle est chargé et le charger si nécessaire
+    if symbol not in MODELS or symbol not in METADATA:
+        if not load_model(symbol):
+            return {"error": f"Failed to load model for {symbol}"}
 
     # Récupérer les paramètres du modèle depuis les métadonnées
     metadata = METADATA[symbol]

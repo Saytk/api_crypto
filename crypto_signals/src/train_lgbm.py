@@ -524,12 +524,31 @@ def train(symbol: str = "BTCUSDT", df: pd.DataFrame | None = None):
     out = Path(__file__).parent / "models"
     out.mkdir(exist_ok=True)
     model_path = out / f"lgbm_hit5_{symbol}.txt"
-    booster.save_model(model_path)
+
+    # Sauvegarder le modèle avec gestion d'erreur
+    try:
+        booster.save_model(str(model_path))
+
+        # Vérifier que le fichier a été correctement sauvegardé
+        with open(model_path, 'r') as f:
+            first_line = f.readline().strip()
+            if first_line != "tree":
+                log.error(f"[train] Le modèle sauvegardé n'a pas le bon format (ne commence pas par 'tree')")
+                # Supprimer le fichier corrompu
+                model_path.unlink(missing_ok=True)
+                raise ValueError("Invalid model format")
+    except Exception as e:
+        log.error(f"[train] Erreur lors de la sauvegarde du modèle: {e}")
+        raise
 
     # Sauvegarder les métadonnées (incluant les paramètres de calibration et features)
     metadata_path = out / f"metadata_{symbol}.json"
-    with open(metadata_path, "w") as f:
-        json.dump(metadata, f, indent=2)
+    try:
+        with open(metadata_path, "w") as f:
+            json.dump(metadata, f, indent=2)
+    except Exception as e:
+        log.error(f"[train] Erreur lors de la sauvegarde des métadonnées: {e}")
+        raise
 
     log.info(f"[train] Modèle sauvegardé → {model_path}")
     log.info(f"[train] Métadonnées sauvegardées → {metadata_path}")

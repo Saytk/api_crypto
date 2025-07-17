@@ -24,7 +24,7 @@ import jwt
 from jwt.exceptions import PyJWTError
 
 # Import project modules
-from crypto_signals.src.predict import predict, MODELS
+from crypto_signals.src.predict import predict
 from crypto_signals.src.backtest import walk_forward_backtest
 from crypto_signals.src.train_lgbm import train
 from crypto_signals.src.data_loader import load_minute
@@ -185,7 +185,11 @@ def get_model_metadata(symbol: str) -> dict:
 
 def get_available_models() -> List[str]:
     """Get list of available models"""
-    return list(MODELS.keys())
+    # Instead of relying on MODELS which might be empty if models haven't been loaded yet,
+    # check for model files in the models directory
+    models_dir = PathLib(__file__).parent / "models"
+    model_files = list(models_dir.glob("lgbm_hit5_*.txt"))
+    return [f.name.replace("lgbm_hit5_", "").replace(".txt", "") for f in model_files if f.exists()]
 
 def get_historical_predictions(symbol: str, days: int = 7) -> List[dict]:
     """Generate predictions for historical data"""
@@ -193,28 +197,48 @@ def get_historical_predictions(symbol: str, days: int = 7) -> List[dict]:
     if df.empty:
         return []
 
+    # Check if model file exists
+    model_file = PathLib(__file__).parent / "models" / f"lgbm_hit5_{symbol}.txt"
+    if not model_file.exists():
+        return [{"error": f"Model file for {symbol} not found"}]
+
+    # Import the load_model function from predict.py
+    from crypto_signals.src.predict import load_model
+
+    # Load the model if not already loaded
     if symbol not in MODELS:
-        return [{"error": f"Model for {symbol} not found"}]
+        if not load_model(symbol):
+            return [{"error": f"Failed to load model for {symbol}"}]
 
     # Add features
     from crypto_signals.src.feature_factory import add_minute_features, FEATURE_ORDER
     feats = add_minute_features(df)
 
+    # Get selected features from metadata
+    from crypto_signals.src.predict import METADATA
+    selected_features = METADATA[symbol].get("selected_features", FEATURE_ORDER)
+
     # Generate predictions
     predictions = []
     for i in range(len(feats)):
-        row = feats.iloc[i:i+1]
-        p_up = MODELS[symbol].predict(row[FEATURE_ORDER])[0]
-        signal = "LONG" if p_up > 0.65 else "SHORT" if p_up < 0.35 else "FLAT"
-        confidence = min(abs(p_up - 0.5) * 2, 1.0)
+        try:
+            row = feats.iloc[i:i+1]
+            # Use only selected features
+            available_features = [f for f in selected_features if f in row.columns]
+            p_up = MODELS[symbol].predict(row[available_features])[0]
+            signal = "LONG" if p_up > 0.65 else "SHORT" if p_up < 0.35 else "FLAT"
+            confidence = min(abs(p_up - 0.5) * 2, 1.0)
 
-        predictions.append({
-            "symbol": symbol,
-            "timestamp": df["timestamp_utc"].iloc[i].isoformat(),
-            "prob_up": round(float(p_up), 4),
-            "signal": signal,
-            "confidence": round(float(confidence), 4)
-        })
+            predictions.append({
+                "symbol": symbol,
+                "timestamp": df["timestamp_utc"].iloc[i].isoformat(),
+                "prob_up": round(float(p_up), 4),
+                "signal": signal,
+                "confidence": round(float(confidence), 4)
+            })
+        except Exception as e:
+            log.error(f"Error generating prediction for row {i}: {str(e)}")
+            # Continue with next row
 
     return predictions
 
@@ -292,19 +316,30 @@ def get_model_info(symbol: str):
     """
     Retourne les informations détaillées sur un modèle spécifique
     """
-    if symbol not in MODELS:
-        raise HTTPException(status_code=404, detail=f"Model for {symbol} not found")
+    # Check if model file exists
+    model_file = PathLib(__file__).parent / "models" / f"lgbm_hit5_{symbol}.txt"
+    if not model_file.exists():
+        raise HTTPException(status_code=404, detail=f"Model file for {symbol} not found")
 
     metadata = get_model_metadata(symbol)
 
     # Get feature importance if available
     feature_importance = {}
     try:
+        # Import the load_model function from predict.py
+        from crypto_signals.src.predict import load_model
+
+        # Load the model if not already loaded
+        if symbol not in MODELS:
+            if not load_model(symbol):
+                raise HTTPException(status_code=500, detail=f"Failed to load model for {symbol}")
+
         importance = MODELS[symbol].feature_importance()
         for i, feature in enumerate(FEATURE_ORDER):
             feature_importance[feature] = float(importance[i])
-    except:
-        pass
+    except Exception as e:
+        log.warning(f"Could not get feature importance for {symbol}: {str(e)}")
+        # Continue without feature importance
 
     return {
         "symbol": symbol,

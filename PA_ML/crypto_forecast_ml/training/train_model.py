@@ -69,7 +69,7 @@ def train_direction_model(df: pd.DataFrame, output_path: str = "models/xgb_direc
         base_dir = os.path.dirname(os.path.dirname(current_dir))
         abs_path = os.path.join(base_dir, output_path)
 
-    model.save_model(output_path)
+    model.save_model(str(output_path))
     logger.info(f"✅ Modèle entraîné et sauvegardé dans : {output_path}")
     logger.info(f"✅ Chemin absolu du modèle : {abs_path}")
 

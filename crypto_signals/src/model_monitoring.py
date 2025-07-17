@@ -50,7 +50,7 @@ class ModelMonitor:
             volatility_adjustment: Ajuster les seuils en fonction de la volatilité récente
         """
         self.symbol = symbol
-        self.model = lgb.Booster(model_file=model_path)
+        self.model = lgb.Booster(model_file=str(model_path))
 
         # Fichier d'historique par défaut
         if history_file is None:
